@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'database.dart';
-import 'register.dart';
+import 'package:login/register.dart';
 import 'sampleHome.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -11,20 +12,18 @@ class LoginPage extends StatefulWidget {
 }
 
 class LoginPageState extends State<LoginPage> {
-  final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailOrUsernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
   @override
   void dispose() {
-    // Pastikan untuk membuang controller saat halaman dihapus
-    nameController.dispose();
+    emailOrUsernameController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  // Variabel untuk mengontrol skala tombol
   double scale = 1.0;
-  double opact = 1.0;
+  double opacity = 1.0;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +40,7 @@ class LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Judul
+              // Title
               Container(
                 padding: const EdgeInsets.only(bottom: 60, top: 100),
                 child: const Text(
@@ -54,22 +53,23 @@ class LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 80), // Jarak setelah judul
+              const SizedBox(height: 80),
 
-              // Nama Field
-              textField(label: "Nama", controller: nameController),
+              // Name Field
+              textField(label: "Username", controller: emailOrUsernameController),
 
               const SizedBox(height: 10),
 
               // Password Field
               textField(
-                  label: "Password",
-                  isPassword: true,
-                  controller: passwordController),
+                label: "Password",
+                isPassword: true,
+                controller: passwordController,
+              ),
 
               const SizedBox(height: 30),
 
-              // Tombol Login
+              // Login Button
               button(),
 
               const SizedBox(height: 250),
@@ -88,11 +88,10 @@ class LoginPageState extends State<LoginPage> {
                   ),
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const RegisterPage(),
-                        ),
+                      Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const RegisterPage()),
                       );
                     },
                     child: const Text(
@@ -114,11 +113,12 @@ class LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Method untuk membangun TextField
-  Widget textField(
-      {required String label,
-      bool isPassword = false,
-      required TextEditingController controller}) {
+  // Method for TextField
+  Widget textField({
+    required String label,
+    bool isPassword = false,
+    required TextEditingController controller,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -134,7 +134,7 @@ class LoginPageState extends State<LoginPage> {
           width: 350,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: TextField(
-            controller: controller, // Controller untuk TextField
+            controller: controller,
             obscureText: isPassword,
             style: const TextStyle(
               fontSize: 13,
@@ -160,51 +160,51 @@ class LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Method untuk membangun tombol dengan gambar
+  // Login button with animation
   Widget button() {
     return GestureDetector(
       onTapDown: (_) {
         setState(() {
           scale = 0.9;
-          opact = 0.7;
+          opacity = 0.7;
         });
       },
       onTapUp: (_) {
         setState(() {
           scale = 1.0;
-          opact = 1.0;
+          opacity = 1.0;
         });
-        login(); // Panggil fungsi login ketika tombol ditekan
+        FocusScope.of(context).unfocus();
+        login(); // Call login function when button is tapped
       },
       child: AnimatedOpacity(
-        opacity: opact,
+        opacity: opacity,
         duration: const Duration(milliseconds: 100),
         child: AnimatedScale(
           scale: scale,
           duration: const Duration(milliseconds: 100),
           child: Image.asset(
-            'asset/button.png', // Ganti dengan path gambar Anda
+            'asset/button.png', // Path to your button image
           ),
         ),
       ),
     );
   }
 
-  void login() {
-    String name = nameController.text; // Ambil nama dari TextField
-    String password = passwordController.text; // Ambil password dari TextField
-    int passval = 6;
+  // Login function to connect to Laravel API
+  void login() async {
+    String emailOrUsername = emailOrUsernameController.text; // Ambil nama dari text field
+    String password = passwordController.text; // Ambil password dari text field
 
     // Validasi input
-    if (name.isEmpty || password.isEmpty) {
-      // Tampilkan pesan kesalahan jika field kosong
+    if (emailOrUsername.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nama dan password harus diisi')),
       );
       return;
     }
 
-    if (password.length < passval) {
+    if (password.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Password harus terdiri dari minimal 6 karakter')),
@@ -212,27 +212,41 @@ class LoginPageState extends State<LoginPage> {
       return;
     }
 
-    
-
-    // Mencari user di database
-    User? user = userDatabase.loginUser(name, password); // Panggil fungsi loginUser dengan nama dan password
-
-    if (user != null) {
-      print('Login successful for user: ${user.name}'); // Berhasil login
-      // Navigasi ke halaman utama setelah login berhasil
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
+    try {
+      // Kirim data login langsung tanpa CSRF token
+      var response = await http.post(
+        Uri.parse(
+            'http://10.0.2.2:8000/api/api/login'), // Ganti dengan URL API login Laravel Anda
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'username_or_email': emailOrUsername,
+          'password': password,
+        }),
       );
-    } else {
-      print('Login failed: Invalid name or password'); // Gagal login
-      // Tampilkan pesan kesalahan jika login gagal
+
+      if (response.statusCode == 200) {
+        var responseData = jsonDecode(response.body);
+        print('Login berhasil: ${responseData['message']}');
+
+        // Navigasi ke halaman home setelah login berhasil
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      } else {
+        print('Login gagal: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login gagal. Username atau password salah!')),
+        );
+      }
+    } catch (e) {
+      print('Error selama login: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login failed: Invalid name or password')),
+        const SnackBar(content: Text('Terjadi kesalahan. Coba lagi nanti')),
       );
     }
-
-    nameController.clear();
-    passwordController.clear();
   }
 }

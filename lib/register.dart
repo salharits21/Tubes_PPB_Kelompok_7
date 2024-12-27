@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'database.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'login.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -13,12 +14,10 @@ class RegisterPageState extends State<RegisterPage> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController(); 
+  final TextEditingController confirmPasswordController = TextEditingController();
 
   @override
   void dispose() {
-    // Pastikan untuk membuang controller saat halaman dihapus
     nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
@@ -26,7 +25,6 @@ class RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  // Variabel untuk mengontrol skala tombol
   double scale = 1.0;
   double opact = 1.0;
 
@@ -88,8 +86,7 @@ class RegisterPageState extends State<RegisterPage> {
             textField(
                 hintText: "Konfirmasi password",
                 isPassword: true,
-                controller:
-                    confirmPasswordController), // Field konfirmasi password
+                controller: confirmPasswordController),
             const SizedBox(height: 180),
             button(),
             const SizedBox(height: 50),
@@ -131,7 +128,6 @@ class RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // Method untuk membangun TextField
   Widget textField(
       {required String hintText,
       bool isPassword = false,
@@ -141,7 +137,7 @@ class RegisterPageState extends State<RegisterPage> {
       width: 335,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: TextField(
-        controller: controller, 
+        controller: controller,
         obscureText: isPassword,
         style: const TextStyle(
           fontSize: 13,
@@ -167,7 +163,6 @@ class RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // Method untuk membangun tombol dengan gambar
   Widget button() {
     return GestureDetector(
       onTapDown: (_) {
@@ -197,19 +192,18 @@ class RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  void register() {
-    String name = nameController.text; // Ambil nama dari TextField
-    String email = emailController.text; // Ambil email dari TextField
-    String password = passwordController.text; // Ambil password dari TextField
-    String confirmPassword =
-        confirmPasswordController.text; // Ambil konfirmasi password
+  // Fungsi register yang mengirim data ke backend Laravel
+  void register() async {
+    String name = nameController.text;
+    String email = emailController.text;
+    String password = passwordController.text;
+    String confirmPassword = confirmPasswordController.text;
 
     // Validasi input
     if (name.isEmpty ||
         email.isEmpty ||
         password.isEmpty ||
         confirmPassword.isEmpty) {
-      // Tampilkan pesan kesalahan jika ada field yang kosong
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Semua field harus diisi')),
       );
@@ -221,11 +215,10 @@ class RegisterPageState extends State<RegisterPage> {
         const SnackBar(
             content: Text('Password harus terdiri dari minimal 6 karakter')),
       );
-      return; // Hentikan eksekusi fungsi jika password kurang dari 6 karakter
+      return;
     }
 
-    if (password != confirmPassword) {
-      // Tampilkan pesan kesalahan jika password dan konfirmasi password tidak cocok
+    if (password != confirmPassword.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Password dan konfirmasi password harus sama')),
@@ -234,7 +227,6 @@ class RegisterPageState extends State<RegisterPage> {
     }
 
     bool isValidEmail(String email) {
-      // Ekspresi reguler untuk memvalidasi email
       String pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$';
       RegExp regex = RegExp(pattern);
       return regex.hasMatch(email);
@@ -244,23 +236,55 @@ class RegisterPageState extends State<RegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Format email tidak valid')),
       );
-      return; // Hentikan eksekusi fungsi jika email tidak valid
+      return;
     }
 
-    // Mendaftar user baru ke database
-    userDatabase.registerUser(name, email, password);
-    // Tampilkan pesan sukses dan navigasi ke halaman login
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registrasi berhasil! Silakan login')),
-    );
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  const LoginPage())); // Kembali ke halaman login setelah registrasi
-    });
+    try {
+      final response = await http.post(
+        Uri.parse('http://10.0.2.2:8000/api/api/register'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'password_confirmation': confirmPassword,
+        }),
+      );
 
+      print("Response status: ${response.statusCode}");
+      print("Response body: ${response.body}");
+
+      if (response.statusCode == 201) {
+        var responseData = jsonDecode(response.body);
+        print('Registration successful: ${responseData['message']}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrasi berhasil! Silakan login')),
+        );
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+          );
+        });
+      } else {
+        var errorMessage =
+            jsonDecode(response.body)['message'] ?? 'Gagal registrasi';
+        print('Registration failed: $errorMessage');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal registrasi: $errorMessage')),
+        );
+      }
+    } catch (e) {
+      print("Error during registration: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Terjadi kesalahan. Coba lagi nanti')),
+      );
+    }
+
+    // Clear input fields after registration attempt
     nameController.clear();
     emailController.clear();
     passwordController.clear();
